@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::{collections::HashMap, iter::Peekable, slice::Iter};
 
 #[derive(Debug)]
 enum Token {
@@ -81,104 +81,102 @@ pub struct TreeNode {
 }
 
 impl TreeNode {
-    fn new(
-        element: String,
-        attributes: HashMap<String, String>,
-        children: Vec<TreeNode>,
-    ) -> TreeNode {
+    fn new(element: String) -> TreeNode {
         TreeNode {
             element,
-            attributes,
-            children,
+            attributes: HashMap::new(),
+            children: vec![],
         }
     }
 }
 
-fn parse_attributes(tree: &mut TreeNode, tokens: &[Token]) -> usize {
-    let mut attribute_name = None;
-    let mut has_seen_equals = false;
+fn parse_attributes(tree: &mut TreeNode, iter: &mut Peekable<Iter<Token>>) {
+    enum State {
+        None,
+        Attribute(String),
+        Equals(String),
+    }
 
-    let mut iter = tokens.iter().enumerate();
+    let mut state = State::None;
 
-    while let Some((i, token)) = iter.next() {
-        match token {
-            Token::Identifier(identifier) => {
-                attribute_name = Some(identifier.to_string());
+    while let Some(token) = iter.next() {
+        match (state, token) {
+            (State::None, Token::Identifier(identifier)) => {
+                state = State::Attribute(identifier.clone())
             }
-            Token::Equals => match has_seen_equals {
-                true => panic!("Only one equals permitted"),
-                false => has_seen_equals = true,
-            },
-            Token::StringLiteral(value) => {
-                let attribute = attribute_name.expect("Attribute name should be specified");
-
-                if !has_seen_equals {
-                    panic!("Equal sign needed between attribute name and value")
-                }
-
+            (State::Attribute(attribute), Token::Equals) => {
+                state = State::Equals(attribute.clone())
+            }
+            (State::Equals(attribute), Token::StringLiteral(value)) => {
                 tree.attributes.insert(attribute, value.to_string());
 
-                has_seen_equals = false;
-                attribute_name = None;
+                state = State::None;
             }
-            Token::CloseParen => {
-                return i;
+            (State::None, Token::CloseParen) => {
+                return;
             }
-            _ => panic!("Token in invalid position"),
+            _ => panic!(),
         }
     }
-
-    return tokens.len();
 }
 
-fn parse_element(tokens: &[Token]) -> (TreeNode, usize) {
-    let mut tree = TreeNode::new(String::from(""), HashMap::new(), vec![]);
+fn parse_elements(iter: &mut Peekable<Iter<Token>>) -> Vec<TreeNode> {
+    let mut elements = vec![];
 
-    let mut iter = tokens.iter().enumerate();
+    while let Some(_) = iter.peek() {
+        elements.push(parse_element(iter));
+    }
 
-    while let Some((i, token)) = iter.next() {
+    return elements;
+}
+
+fn parse_element(mut iter: &mut Peekable<Iter<Token>>) -> TreeNode {
+    let element = match iter.next().unwrap() {
+        Token::Identifier(identifier) => identifier.to_string(),
+        _ => panic!("Cannot have unnamed elements"),
+    };
+
+    let mut tree = TreeNode::new(element);
+
+    while let Some(token) = iter.peek() {
         match token {
-            Token::Identifier(identifier) => tree.element = identifier.to_string(),
             Token::OpenParen => {
-                if tree.element == "" {
-                    panic!("Cannot have unnamed elements");
-                }
-
-                let start_at = i + 1;
-
-                let end = parse_attributes(&mut tree, &tokens[start_at..]);
-
-                // skip loop to iteration "end"
-                iter.nth(end);
+                iter.next();
+                parse_attributes(&mut tree, iter);
             }
-            Token::CloseParen => panic!(") in invalid position"),
             Token::OpenBracket => {
-                if tree.element == "" {
-                    panic!("Cannot have unnamed elements");
-                }
-
-                let start_at = i + 1;
-
-                let (parsed, end) = parse_element(&tokens[start_at..]);
-
-                tree.children.push(parsed);
-
-                // skip loop to iteration "end"
-                iter.nth(end);
+                iter.next();
+                tree.children = parse_elements(&mut iter);
             }
-            Token::CloseBracket => return (tree, i),
+            Token::CloseBracket => {
+                iter.next();
+                iter.next(); // skip to token after bracket
+                return tree;
+            }
+            Token::Identifier(_) => {
+                return tree;
+            }
             _ => panic!("Token in invalid position"),
         };
     }
 
-    return (tree, tokens.len());
+    return tree;
 }
 
-fn parse(tokens: &[Token]) -> TreeNode {
-    parse_element(tokens).0
+fn parse(tokens: &[Token]) -> Vec<TreeNode> {
+    parse_elements(&mut tokens.iter().peekable())
 }
 
-pub fn markup_to_html(tree: &TreeNode, ident_level: usize) -> String {
+fn treenodes_to_html(tree_nodes: Peekable<Iter<TreeNode>>, ident_level: usize) -> String {
+    let html = tree_nodes
+        .map(|node| treenode_to_html(node, ident_level))
+        .collect::<Vec<_>>()
+        .join("\n");
+
+    return html;
+}
+
+pub fn treenode_to_html(tree: &TreeNode, ident_level: usize) -> String {
     let mut html = String::new();
 
     let mut attributes_html = String::new();
@@ -195,16 +193,18 @@ pub fn markup_to_html(tree: &TreeNode, ident_level: usize) -> String {
         html.push_str(&format!("{ident}<{} {attributes_html}>\n", tree.element))
     }
 
-    for node in &tree.children {
-        html.push_str(&markup_to_html(node, ident_level + 1));
-    }
-    html.push_str(&format!("\n{ident}<{}/>", tree.element));
+    html.push_str(&treenodes_to_html(
+        tree.children.iter().peekable(),
+        ident_level + 1,
+    ));
 
-    html
+    html.push_str(&format!("\n{ident}</{}>", tree.element));
+
+    return html;
 }
 
 pub fn markup_text_to_html(text: &str) -> String {
     let tree = parse(&tokenize(text));
 
-    markup_to_html(&tree, 0)
+    treenodes_to_html(tree.iter().peekable(), 0)
 }

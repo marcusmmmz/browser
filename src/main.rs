@@ -6,9 +6,11 @@ fn main() {
     println!(
         "{}",
         markup_text_to_html(
-            "div {
-                div(class=\"flex justify-center\") {
-                    p(text=\"banana\")
+            "div (class=\"flex justify-center\") {
+                p (text=\"Hello\")
+                br
+                strong {
+                    p (text=\"Nice\")
                 }
             }"
         )
