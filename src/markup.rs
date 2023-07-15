@@ -91,16 +91,13 @@ impl TreeNode {
         }
     }
 
-    fn new_text(element: String, text: String) -> TreeNode {
-        TreeNode::new_element(
-            element,
-            vec![TreeNode {
-                is_text: true,
-                element: text,
-                attributes: HashMap::new(),
-                children: vec![],
-            }],
-        )
+    fn new_text(text: String) -> TreeNode {
+        TreeNode {
+            is_text: true,
+            element: text,
+            attributes: HashMap::new(),
+            children: vec![],
+        }
     }
 }
 
@@ -155,6 +152,9 @@ fn parse_elements(iter: &mut Peekable<Iter<Token>>) -> Vec<TreeNode> {
 fn parse_element(mut iter: &mut Peekable<Iter<Token>>) -> TreeNode {
     let element = match iter.next().unwrap() {
         Token::Identifier(identifier) => identifier.to_string(),
+        Token::StringLiteral(string) => {
+            return TreeNode::new_text(string.clone());
+        }
         _ => panic!("Cannot have unnamed elements"),
     };
 
@@ -180,7 +180,8 @@ fn parse_element(mut iter: &mut Peekable<Iter<Token>>) -> TreeNode {
             }
             Token::StringLiteral(string) => {
                 iter.next();
-                return TreeNode::new_text(element, string.clone());
+
+                return TreeNode::new_element(element, vec![TreeNode::new_text(string.clone())]);
             }
             _ => panic!("Token in invalid position"),
         };

@@ -10,7 +10,11 @@ fn main() {
                 p \"Hello\"
                 br
                 strong {
-                    p \"Nice\"
+                    p {
+                        \"Nice\"
+                        i \"markup\"
+                        \"bro\"
+                    }
                 }
             }"
         )
