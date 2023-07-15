@@ -7,10 +7,10 @@ fn main() {
         "{}",
         markup_text_to_html(
             "div (class=\"flex justify-center\") {
-                p (text=\"Hello\")
+                p \"Hello\"
                 br
                 strong {
-                    p (text=\"Nice\")
+                    p \"Nice\"
                 }
             }"
         )

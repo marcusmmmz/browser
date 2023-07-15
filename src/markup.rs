@@ -75,18 +75,32 @@ fn tokenize(text: &str) -> Vec<Token> {
 
 #[derive(Debug)]
 pub struct TreeNode {
+    is_text: bool,
     element: String,
     attributes: HashMap<String, String>,
     children: Vec<TreeNode>,
 }
 
 impl TreeNode {
-    fn new(element: String) -> TreeNode {
+    fn new_element(element: String, children: Vec<TreeNode>) -> TreeNode {
         TreeNode {
+            is_text: false,
             element,
             attributes: HashMap::new(),
-            children: vec![],
+            children,
         }
+    }
+
+    fn new_text(element: String, text: String) -> TreeNode {
+        TreeNode::new_element(
+            element,
+            vec![TreeNode {
+                is_text: true,
+                element: text,
+                attributes: HashMap::new(),
+                children: vec![],
+            }],
+        )
     }
 }
 
@@ -125,6 +139,14 @@ fn parse_elements(iter: &mut Peekable<Iter<Token>>) -> Vec<TreeNode> {
 
     while let Some(_) = iter.peek() {
         elements.push(parse_element(iter));
+
+        match iter.peek() {
+            Some(Token::CloseBracket) => {
+                iter.next();
+                return elements;
+            }
+            _ => {}
+        }
     }
 
     return elements;
@@ -136,7 +158,7 @@ fn parse_element(mut iter: &mut Peekable<Iter<Token>>) -> TreeNode {
         _ => panic!("Cannot have unnamed elements"),
     };
 
-    let mut tree = TreeNode::new(element);
+    let mut tree = TreeNode::new_element(element.clone(), vec![]);
 
     while let Some(token) = iter.peek() {
         match token {
@@ -155,6 +177,10 @@ fn parse_element(mut iter: &mut Peekable<Iter<Token>>) -> TreeNode {
             }
             Token::Identifier(_) => {
                 return tree;
+            }
+            Token::StringLiteral(string) => {
+                iter.next();
+                return TreeNode::new_text(element, string.clone());
             }
             _ => panic!("Token in invalid position"),
         };
@@ -177,6 +203,12 @@ fn treenodes_to_html(tree_nodes: Peekable<Iter<TreeNode>>, ident_level: usize) -
 }
 
 pub fn treenode_to_html(tree: &TreeNode, ident_level: usize) -> String {
+    let ident = vec!["\t"; ident_level].join("");
+
+    if tree.is_text {
+        return format!("{ident}{}", tree.element);
+    }
+
     let mut html = String::new();
 
     let mut attributes_html = String::new();
@@ -184,8 +216,6 @@ pub fn treenode_to_html(tree: &TreeNode, ident_level: usize) -> String {
     for (attribute, value) in &tree.attributes {
         attributes_html.push_str(&format!("{attribute}=\"{value}\""));
     }
-
-    let ident = vec!["\t"; ident_level].join("");
 
     if tree.attributes.is_empty() {
         html.push_str(&format!("{ident}<{}>\n", tree.element))
